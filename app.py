@@ -132,16 +132,9 @@ except Exception as e:
     st.error(f"An error occurred during data compilation: {e}")
     st.stop()
 
-# 4. Sidebar Filter System
-st.sidebar.header("⚙️ Sub-Industry Filter")
-all_industries = sorted(df["Industry"].unique())
-selected_industries = st.sidebar.multiselect(
-    "Select Sectors to Display:", 
-    options=all_industries, 
-    default=all_industries
-)
-
-filtered_df = df[df["Industry"].isin(selected_industries)].copy()
+# 4. Filter Bypass
+# 💡 [사이드바 필터 전면 제거] st.sidebar 관련 시스템을 삭제하고 전체 데이터를 다이렉트로 바인딩합니다.
+filtered_df = df.copy()
 
 # Dynamic Data Mapping based on User Selector
 filtered_df["Selected_Return"] = filtered_df[selected_period]
@@ -173,7 +166,6 @@ fig.update_layout(margin=dict(t=10, l=10, r=10, b=10), height=700)
 st.plotly_chart(fig, use_container_width=True)
 
 # 6. Data Grid Display
-# 💡 [하단 표 정렬 기준 세팅] 변동률 정렬 대신 시가총액(MarketCap) 높은 순 정렬로 고정했습니다.
 st.write("### 📋 Real-Time Portfolio Performance Metrics (Sorted by MarketCap)")
 st.dataframe(
     filtered_df[["Ticker", "Name", "Industry", "MarketCap", selected_period]]
