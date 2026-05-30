@@ -42,7 +42,7 @@ def get_combined_map_data():
         # Semiconductors (Memory)
         "MU": {"Name": "Micron Technology", "Industry": "Semiconductors (Memory)", "Display_Ticker": "MU"},
         "WDC": {"Name": "Western Digital", "Industry": "Semiconductors (Memory)", "Display_Ticker": "WDC"},
-        "SDSK": {"Name": "Sandisk Corp", "Industry": "Semiconductors (Memory)", "Display_Ticker": "SNDK"},
+        "SNDK": {"Name": "Sandisk Corp", "Industry": "Semiconductors (Memory)", "Display_Ticker": "SNDK"},
         "005930.KS": {"Name": "Samsung Electronics", "Industry": "Semiconductors (Memory)", "Display_Ticker": "SEC"},
         "000660.KS": {"Name": "SK Hynix", "Industry": "Semiconductors (Memory)", "Display_Ticker": "HYNIX"},
         
