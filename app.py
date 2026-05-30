@@ -133,7 +133,6 @@ except Exception as e:
     st.stop()
 
 # 4. Filter Bypass
-# 💡 [사이드바 필터 전면 제거] st.sidebar 관련 시스템을 삭제하고 전체 데이터를 다이렉트로 바인딩합니다.
 filtered_df = df.copy()
 
 # Dynamic Data Mapping based on User Selector
@@ -162,7 +161,22 @@ fig.update_traces(
     selector=dict(type="treemap")
 )
 
-fig.update_layout(margin=dict(t=10, l=10, r=10, b=10), height=700)
+# 💡 [모바일 반응형 레이아웃 해킹 패치]
+# 오른쪽에 흉측하게 서 있던 컬러바를 하단 웅장한 가로형 탭(orientation='h')으로 변경합니다.
+# 또한 모바일 세로 모드 대응을 위해 가로 세로 높이 비율 및 패딩을 전면 슬림화했습니다.
+fig.update_layout(
+    margin=dict(t=10, l=10, r=10, b=10),
+    height=600,  # 모바일 한눈에 보기에 가장 이상적인 높이로 타협 조정
+    coloraxis_colorbar=dict(
+        orientation="h",       # 가로 방향 배치 명시
+        yanchor="top",
+        y=-0.05,               # 트리맵 아래 공간 배치
+        xanchor="center",
+        x=0.5,
+        len=0.9,               # 컬러바 가로 길이 비율
+        thickness=15           # 컬러바 두께 슬림화
+    )
+)
 st.plotly_chart(fig, use_container_width=True)
 
 # 6. Data Grid Display
