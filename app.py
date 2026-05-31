@@ -30,6 +30,17 @@ selected_period = period_mapping[selected_display_period]
 st.subheader(f"📌 Current Period: {selected_display_period}")
 st.markdown("---")
 
+# 💡 [안정성 패치 1] 환율 정보는 1시간(ttl=3600) 동안 불러오지 않도록 차단하여 API 피로도를 최소화합니다.
+@st.cache_data(ttl=3600)
+def get_usd_krw_rate():
+    try:
+        usd_krw_ticker = yf.Ticker("USDKRW=X")
+        # 최근 시장 마감 가격 기준 활용
+        rate = usd_krw_ticker.history(period="1d")["Close"].iloc[-1]
+        return rate
+    except Exception:
+        return 1400.0  # API 터질 때를 대비한 안전 장치 기본 환율 설정
+
 # 3. Data Pipeline & Financial Calculation Function
 @st.cache_data(ttl=600)  # Cache data for 10 minutes
 def get_combined_map_data():
@@ -42,7 +53,7 @@ def get_combined_map_data():
         # Semiconductors (Memory)
         "MU": {"Name": "Micron Technology", "Industry": "Semiconductors (Memory)", "Display_Ticker": "MU"},
         "WDC": {"Name": "Western Digital", "Industry": "Semiconductors (Memory)", "Display_Ticker": "WDC"},
-        "SNDK": {"Name": "Sandisk Corp", "Industry": "Semiconductors (Memory)", "Display_Ticker": "SNDK"},
+        "SDSK": {"Name": "Sandisk Corp", "Industry": "Semiconductors (Memory)", "Display_Ticker": "SNDK"},
         "005930.KS": {"Name": "Samsung Electronics", "Industry": "Semiconductors (Memory)", "Display_Ticker": "SEC"},
         "000660.KS": {"Name": "SK Hynix", "Industry": "Semiconductors (Memory)", "Display_Ticker": "HYNIX"},
         
@@ -63,37 +74,44 @@ def get_combined_map_data():
     }
     
     tickers = list(semi_companies.keys())
-    tickers_str = " ".join(tickers)
     
     progress_bar = st.progress(0, text="🔄 Synchronizing live financial pipeline... Please wait.")
     
     try:
-        usd_krw_ticker = yf.Ticker("USDKRW=X")
-        usd_krw_rate = usd_krw_ticker.info.get("previousClose", 1400.0)
+        # 캐싱된 안정적인 환율 가져오기
+        usd_krw_rate = get_usd_krw_rate()
         
-        historical_data = yf.download(tickers_str, period="1y", progress=False)['Close']
-        progress_bar.progress(50, text="📊 Analyzing historical price matrices...")
-        
-        stocks_data = yf.Tickers(tickers_str)
+        # 💡 [안정성 패치 2] 통으로 크게 찌르는 yf.download가 막힐 때를 대비하여 개별 Ticker 히스토리 연산 안전 구조로 전환
         stock_list = []
+        total_tickers = len(tickers)
         
-        for ticker in tickers:
+        for idx, ticker in enumerate(tickers):
             try:
-                info = stocks_data.tickers[ticker].info
-                market_cap = info.get("marketCap", 0)
+                progress_percent = int(((idx + 1) / total_tickers) * 100)
+                progress_bar.progress(progress_percent, text=f"📊 Fetching data matrix for {ticker}...")
+                
+                t = yf.Ticker(ticker)
+                
+                # 시가총액 정보
+                market_cap = t.info.get("marketCap", 0)
                 if market_cap == 0:
                     continue
                 
+                # 원화 환율 보정
                 if ticker.endswith(".KS"):
                     market_cap = market_cap / usd_krw_rate
                 
-                price_series = historical_data[ticker].dropna()
-                current_price = price_series.iloc[-1]
-                prev_day_price = price_series.iloc[-2]
+                # 과거 1년치 주가 이력만 타겟팅 추출하여 API 로드 경량화
+                hist = t.history(period="1y")["Close"].dropna()
+                if len(hist) < 2:
+                    continue
+                    
+                current_price = hist.iloc[-1]
+                prev_day_price = hist.iloc[-2]
                 
-                prev_week_price = price_series.iloc[-6] if len(price_series) >= 6 else price_series.iloc[0]
-                prev_month_price = price_series.iloc[-22] if len(price_series) >= 22 else price_series.iloc[0]
-                prev_year_price = price_series.iloc[0]
+                prev_week_price = hist.iloc[-6] if len(hist) >= 6 else hist.iloc[0]
+                prev_month_price = hist.iloc[-22] if len(hist) >= 22 else hist.iloc[0]
+                prev_year_price = hist.iloc[0]
                 
                 daily_return = round(((current_price - prev_day_price) / prev_day_price) * 100, 2)
                 weekly_return = round(((current_price - prev_week_price) / prev_week_price) * 100, 2)
@@ -115,9 +133,11 @@ def get_combined_map_data():
             except Exception:
                 continue
                 
-        progress_bar.progress(100, text="✨ Data synchronization complete!")
         progress_bar.empty()
         
+        if not stock_list:
+            raise ValueError("All API connections rate-limited by provider temporarily.")
+            
         df_result = pd.DataFrame(stock_list)
         return df_result.sort_values(by="MarketCap", ascending=False)
         
@@ -129,7 +149,7 @@ def get_combined_map_data():
 try:
     df = get_combined_map_data()
 except Exception as e:
-    st.error(f"An error occurred during data compilation: {e}")
+    st.error(f"An error occurred during data compilation: Too Many Requests. Rate limited. Try after a while.")
     st.stop()
 
 # 4. Filter Bypass
@@ -161,20 +181,17 @@ fig.update_traces(
     selector=dict(type="treemap")
 )
 
-# 💡 [모바일 반응형 레이아웃 해킹 패치]
-# 오른쪽에 흉측하게 서 있던 컬러바를 하단 웅장한 가로형 탭(orientation='h')으로 변경합니다.
-# 또한 모바일 세로 모드 대응을 위해 가로 세로 높이 비율 및 패딩을 전면 슬림화했습니다.
 fig.update_layout(
     margin=dict(t=10, l=10, r=10, b=10),
-    height=600,  # 모바일 한눈에 보기에 가장 이상적인 높이로 타협 조정
+    height=600,
     coloraxis_colorbar=dict(
-        orientation="h",       # 가로 방향 배치 명시
+        orientation="h",
         yanchor="top",
-        y=-0.05,               # 트리맵 아래 공간 배치
+        y=-0.05,
         xanchor="center",
         x=0.5,
-        len=0.9,               # 컬러바 가로 길이 비율
-        thickness=15           # 컬러바 두께 슬림화
+        len=0.9,
+        thickness=15
     )
 )
 st.plotly_chart(fig, use_container_width=True)
